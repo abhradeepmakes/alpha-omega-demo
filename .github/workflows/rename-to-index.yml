@@ -1,0 +1,27 @@
+name: Rename uploaded file to index.html
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/rename-to-index.yml'
+
+jobs:
+  rename:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rename uploaded file to index.html
+        run: |
+          set -e
+          if [ -f "index.html" ]; then
+            git rm -q index.html
+          fi
+          git mv alpha-omega-demo-website.html index.html
+          git config user.name "abhradeepmakes"
+          git config user.email "abhradeepmakes@users.noreply.github.com"
+          git commit -m "Rename uploaded file to index.html"
+          git push
