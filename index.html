@@ -252,6 +252,10 @@
 
   /* ---------- Reveal defaults (JS animates from; content visible without JS) ---------- */
   .rv{will-change:transform,opacity}
+  /* Fallback reveals, used only if the GSAP CDN is unreachable: the class is
+     added by the inline script, so the normal path never hides content. */
+  .no-gsap .rv{opacity:0;transform:translateY(40px);transition:opacity .9s ease,transform .9s cubic-bezier(.22,1,.36,1)}
+  .no-gsap .rv.in{opacity:1;transform:none}
 
   @media (max-width:900px){
     .coach-grid,.branch-grid{grid-template-columns:1fr}
@@ -273,9 +277,12 @@
     .squeeze-inner{height:140vh}
   }
   @media (prefers-reduced-motion:reduce){
-    *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+    /* Still only the two most vestibular-heavy ambient loops — the slow hero
+       backdrop drift and the pulsing dot. The site's motion (preloader wipe,
+       marquees, scroll choreography, reveals) is the product and stays on:
+       an OS-level "animations off" debloat toggle must not freeze the page. */
     .hero-media img{animation:none}
-    #preloader{display:none}
+    .ab-dot{animation:none}
   }
 </style>
 </head>
@@ -613,15 +620,32 @@
   }
 
   function killPreloader(){ if (pre){ pre.classList.add("done"); } }
-  if (reduce){ killPreloader(); return; }
+  /* NOTE: no early return on reduced-motion. A debloated/performance-tuned
+     Windows reports prefers-reduced-motion even when the viewer wants motion;
+     the CSS block above stills the heavy ambient loops, and Lenis smoothing
+     is skipped below — but the scroll choreography must still run. */
   setTimeout(killPreloader, 3400); /* CSS animation hides it sooner; this is a belt-and-braces removal */
 
-  if (!window.gsap || !window.ScrollTrigger){ return; }
+  if (!window.gsap || !window.ScrollTrigger){
+    /* CDN unreachable: fall back to IO-driven reveals so the page still moves
+       instead of sitting frozen. Scroll set-pieces degrade to static. */
+    document.documentElement.classList.add("no-gsap");
+    if ("IntersectionObserver" in window){
+      var rio = new IntersectionObserver(function(entries){
+        entries.forEach(function(e){ if (e.isIntersecting){ e.target.classList.add("in"); rio.unobserve(e.target); } });
+      }, { threshold: .12, rootMargin: "0px 0px -6% 0px" });
+      document.querySelectorAll(".rv").forEach(function(el){ rio.observe(el); });
+    } else {
+      document.querySelectorAll(".rv").forEach(function(el){ el.classList.add("in"); });
+    }
+    return;
+  }
   gsap.registerPlugin(ScrollTrigger);
 
-  /* Lenis smooth scroll synced to GSAP ticker */
+  /* Lenis smooth scroll synced to GSAP ticker (skipped under reduced-motion:
+     native wheel scrolling drives ScrollTrigger just the same) */
   var lenis = null;
-  if (window.Lenis){
+  if (window.Lenis && !reduce){
     lenis = new Lenis({ lerp: 0.09, wheelMultiplier: 1, smoothWheel: true });
     lenis.on("scroll", ScrollTrigger.update);
     gsap.ticker.add(function(time){ lenis.raf(time * 1000); });
